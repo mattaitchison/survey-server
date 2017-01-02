@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Survey</title>
+    <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.1.0/jquery.min.js"></script>
+    <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0-alpha.5/css/bootstrap.min.css" integrity="sha384-AysaV+vQoT3kOAXZkl02PThvDr8HYKPZhNT5h/CXfBThSRXQ6jW5DO2ekP5ViFdi" crossorigin="anonymous">
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0-alpha.5/js/bootstrap.min.js" integrity="sha384-BLiI7JTZm+JWlgKa0M0kGRpJbF2J8q+qreVrKBC47e3K6BW78kGLrCkeRX6I9RoK" crossorigin="anonymous"></script>
+    <script src="https://cdn.datatables.net/1.10.13/js/jquery.dataTables.min.js"></script>
+    <link rel="stylesheet" href="https://cdn.datatables.net/1.10.13/css/jquery.dataTables.min.css">
+</head>
+<body>
+
+<nav class="navbar navbar-light bg-faded">
+    <a class="navbar-brand" href="#">Survey</a>
+    <ul class="nav navbar-nav">
+        <li class="nav-item active">
+            <a class="nav-link" href="/">Results <span class="sr-only">(current)</span></a>
+        </li>
+        <li class="nav-item">
+            <a class="nav-link" href="/add">Add</a>
+        </li>
+    </ul>
+</nav>
+
+<div class="jumbotron">
+    <h1 class="display-3">Survey Results</h1>
+    <p class="lead">I have broken down the survey results into <div class="tag tag-default">Region</div> <div class="tag tag-primary">Personal</div> <div class="tag tag-success">Discovery</div> and <div class="tag tag-info">Use</div></p>
+    <hr class="my-2">
+    <p class="lead">
+        <a class="btn btn-primary btn-lg btn-block" href="/records" role="button">Add new entry!</a>
+    </p>
+</div>
+    <table class="table table-striped table-bordered" id="example">
+        <thead>
+        <tr>
+            <th>Name</th>
+            <th>Age</th>
+            <th>Occupation</th>
+            <th>Location</th>
+            <th>Discovery Category</th>
+            <th>Discovery Notes</th>
+            <th>Use Category</th>
+            <th>Use Notes</th>
+            <th>Company</th>
+            <th>Email</th>
+            <td>Utils</td>
+        </tr>
+        </thead>
+        <tbody>
+
+        </tbody>
+    </table>
+</body>
+</html>
+
+<script>
+    $(document).ready(function() {
+        function binder() {
+            $('.delete').bind('click', function (e) {
+                $(this).closest('tr').fadeOut();
+                var id = $(this).closest('tr').attr('id');
+                $.ajax({
+                    url: "/records/" + id,
+                    type: "DELETE"
+                }).done(function() {
+                    console.log("Deleted " + id)
+                })
+            });
+            $('.edit').bind('click', function(e) {
+                var tr = $(this).closest('tr');
+                var td = $(tr.children());
+                for (var i = 0; i < td.length - 1; i++) {
+                    td[i].innerHTML = '<input type="text" value="'+ td[i].textContent +'">'
+                }
+                var btn = $(this).closest('td');
+                btn.html('<button class="btn btn-success save">Save</button>');
+                $('.save').bind('click', function(e) {
+                    var tr = $(this).closest('tr');
+                    var td = $(tr.children());
+                    var saveId = tr.attr('id');
+                    var data = {
+                        "name": $(td[0].lastChild).val(),
+                        "age": $(td[1].lastChild).val(),
+                        "occupation": $(td[2].lastChild).val(),
+                        "location": $(td[3].lastChild).val(),
+                        "discoveryCategory": $(td[4].lastChild).val(),
+                        "discoveryNotes": $(td[5].lastChild).val(),
+                        "useCategory": $(td[6].lastChild).val(),
+                        "useNotes": $(td[7].lastChild).val(),
+                        "company": $(td[8].lastChild).val(),
+                        "email": $(td[9].lastChild).val()
+                    };
+                    $.ajax({
+                        url: "/records/" + saveId,
+                        type: "PUT",
+                        data: data
+                    }).done(function() {
+                        console.log("Updated record: " + saveId);
+                        for (var i = 0; i < td.length; i++) {
+                            td[i].innerHTML = $(td[i].lastChild).val()
+                        }
+                        $(btn).html('<button class="btn btn-default edit">Edit</button> <button class="btn btn-default delete">Delete</button>');
+                        binder()
+                    })
+                })
+            });
+        }
+        $('#example').DataTable({
+            "responsive": true,
+            "ajax": {
+                "url": "http://localhost:8080/records",
+                "dataSrc": "",
+                "complete": function() {
+                    binder()
+                }
+            },
+            "rowId": "id",
+            "columns": [
+                {data: "name"},
+                {data: "age"},
+                {data: "occupation"},
+                {data: "location"},
+                {data: "discoveryCategory"},
+                {data: "discoveryNotes"},
+                {data: "useCategory"},
+                {data: "useNotes"},
+                {data: "company"},
+                {data: "email"}
+            ],
+            "columnDefs": [
+                {
+                    "render": function (data, type, row) {
+                        return '<button class="btn btn-default delete">Delete</button> <button class="btn btn-default edit">Edit</button>'
+                    },
+                    "targets": 10
+                }
+            ]
+        });
+
+    })
+</script>
