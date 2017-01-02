@@ -1,81 +1,87 @@
 package filedb
 
 import (
-	"io/ioutil"
-	"fmt"
-	"encoding/json"
 	"crypto/md5"
+	"encoding/json"
+	"fmt"
+	"io/ioutil"
+	"sync"
 	"time"
 )
 
+type Records map[string]Record
+type Record map[string]string
+
 type DB struct {
-	Host string
-	Records map[string]map[string]string
+	Host    string
+	records Records
+	sync.Mutex
 }
 
 func MakeHash() string {
 	return fmt.Sprintf("%x", md5.Sum([]byte(time.Now().String())))
 }
 
-func (d *DB) ReadAll() []byte {
-	f, err := ioutil.ReadFile(d.Host)
-	json.Unmarshal(f, &d.Records)
-	if err != nil {
-		panic(err)
+func (d *DB) readAll() {
+	f, _ := ioutil.ReadFile(d.Host)
+	json.Unmarshal(f, &d.records)
+	if d.records == nil {
+		d.records = make(Records)
 	}
-	return f
 }
 
-func (d *DB) WriteDB() bool {
-	b, _ := json.Marshal(d.Records)
-	err := ioutil.WriteFile(d.Host, b, 0644)
+func (d *DB) writeDB() error {
+	b, err := json.Marshal(d.records)
 	if err != nil {
-		return false
+		return err
 	}
-	return true
+	return ioutil.WriteFile(d.Host, b, 0644)
 }
 
-func (d *DB) InsertRecord(record map[string]string) string {
-	f := d.ReadAll()
-	json.Unmarshal(f, &d.Records)
- 	newId := MakeHash()
-	record["id"] = newId
-	d.Records[newId] = record
-	b, _ := json.Marshal(d.Records)
-	err := ioutil.WriteFile(d.Host, b, 0644)
-	if err != nil {
-		return ""
-	}
-	d.WriteDB()
-	return newId
+func (d *DB) InsertRecord(record Record) string {
+	d.Lock()
+	defer d.Unlock()
+	d.readAll()
+	newID := MakeHash()
+	record["id"] = newID
+	d.records[newID] = record
+	d.writeDB()
+	return newID
 }
 
-func (d *DB) FindID(id string) map[string]string {
-	f := d.ReadAll()
-	json.Unmarshal(f, &d.Records)
-	if val, ok := d.Records[id]; ok {
-		return val
-	}
-	return map[string]string{}
+// All returns underlying records.
+// NOTE: A copy of d.records should be returned to prevent caller from modifying
+// underlying map
+func (d *DB) All() Records {
+	return d.records
+}
+
+func (d *DB) FindID(id string) Record {
+	d.Lock()
+	defer d.Unlock()
+	d.readAll()
+	return d.records[id]
 }
 
 func (d *DB) RemoveID(id string) bool {
-	f := d.ReadAll()
-	json.Unmarshal(f, &d.Records)
-	if _, ok := d.Records[id]; ok {
-		delete(d.Records, id)
-		d.WriteDB()
+	d.Lock()
+	defer d.Unlock()
+	d.readAll()
+	if _, ok := d.records[id]; ok {
+		delete(d.records, id)
+		d.writeDB()
 		return true
 	}
 	return false
 }
 
 func (d *DB) UpdateID(id string, value map[string]string) bool {
-	f := d.ReadAll()
-	json.Unmarshal(f, &d.Records)
-	if _, ok := d.Records[id]; ok {
-		d.Records[id] = value
-		d.WriteDB()
+	d.Lock()
+	defer d.Unlock()
+	d.readAll()
+	if _, ok := d.records[id]; ok {
+		d.records[id] = value
+		d.writeDB()
 		return true
 	}
 	return false

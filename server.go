@@ -1,30 +1,35 @@
 package main
 
 import (
-	"github.com/gorilla/mux"
-	"net/http"
-	"log"
+	"encoding/json"
+
 	"fmt"
 	"html/template"
-	"encoding/json"
-	"filedb"
+	"log"
+	"net/http"
+
+	"github.com/gorilla/mux"
+	"github.com/stevemurr/survey-server/filedb"
 )
 
 const host = "/Users/murr/data/db.json"
 
+var db = filedb.DB{Host: host}
+
 func RecordsHandler(w http.ResponseWriter, r *http.Request) {
-	d := filedb.DB{Host: host}
 	switch r.Method {
 	case "GET":
-		d.ReadAll()
-		results := make([]map[string]string, len(d.Records))
+		db.Lock() // Have to lock when using db.All() to prevent data race.
+		defer db.Unlock()
+		records := db.All()
+		results := make([]map[string]string, len(records))
 		idx := 0
-		for _, value := range d.Records {
+		for _, value := range records {
 			results[idx] = value
 			idx++
 		}
 		b, _ := json.Marshal(results)
-		fmt.Fprintf(w, string(b))
+		w.Write(b)
 	case "POST":
 		name := r.FormValue("name")
 		age := r.FormValue("age")
@@ -36,7 +41,7 @@ func RecordsHandler(w http.ResponseWriter, r *http.Request) {
 		useCategory := r.FormValue("useCategory")
 		useNotes := r.FormValue("useNotes")
 		email := r.FormValue("email")
-		record := make(map[string]string)
+		record := make(filedb.Record)
 		record["name"] = name
 		record["age"] = age
 		record["occupation"] = occupation
@@ -47,13 +52,14 @@ func RecordsHandler(w http.ResponseWriter, r *http.Request) {
 		record["useCategory"] = useCategory
 		record["useNotes"] = useNotes
 		record["email"] = email
-		r := d.InsertRecord(record)
+		r := db.InsertRecord(record)
+		w.WriteHeader(http.StatusCreated)
 		fmt.Fprintf(w, "%s", r)
+
 	}
 }
 
 func RecordHandler(w http.ResponseWriter, r *http.Request) {
-	db := filedb.DB{Host: host}
 	id := mux.Vars(r)["id"]
 	switch r.Method {
 	case "GET":
@@ -90,14 +96,15 @@ func RecordHandler(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+var index = template.Must(template.ParseFiles("templates/index.html"))
+
 func IndexHandler(w http.ResponseWriter, r *http.Request) {
- 	t, _ := template.ParseFiles("templates/index.html")
-        t.Execute(w, "")
+	index.Execute(w, "")
 }
 
 func AddRecordIndex(w http.ResponseWriter, r *http.Request) {
- 	t, _ := template.ParseFiles("templates/records/index.html")
-        t.Execute(w, "")
+	t, _ := template.ParseFiles("templates/records/index.html")
+	t.Execute(w, "")
 }
 
 func main() {
@@ -107,6 +114,11 @@ func main() {
 	router.HandleFunc("/add", AddRecordIndex)
 	router.HandleFunc("/records", RecordsHandler)
 	router.HandleFunc("/records/{id}", RecordHandler)
+
+	router.Walk(func(route *mux.Route, router *mux.Router, ancestors []*mux.Route) error {
+		log.Println(route.GetPathTemplate())
+		return nil
+	})
 	log.Fatal(http.ListenAndServe(":8080", router))
 }
 
